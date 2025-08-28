@@ -6,8 +6,6 @@ def invalid_file_callback():
 
 if sys.stdin is None:
     invalid_file_callback()
-# todo: maybe i need more sophisticated readlines accounting for quoted \n
-# lines = sys.stdin.readlines()
 
 # kudos to https://stackoverflow.com/a/16549381
 # sys.stdin.reconfigure(encoding='utf-8')
@@ -21,6 +19,7 @@ def read_lines():
             break
         if c == '"':
             is_quoted = not is_quoted
+            current_line += c
         elif c == '\n' and not is_quoted:
             lines.append(current_line)
             current_line = ''
@@ -42,6 +41,9 @@ if len(lines) == 0:
     invalid_file_callback()
 
 def parse_values(line):
+    '''
+    Returns a list of values that were comma-separated in the line.
+    '''
     res = []
     current_token = ''
     inside_quotes = False
@@ -62,7 +64,12 @@ def idx_ean_in_header(line):
     If the ean column is not found, returns -1.
     '''
     values = parse_values(line)
-    return values.index('ean') if 'ean' in values else -1
+    lookup_result = -1
+    for i, v in enumerate(values):
+        if v == 'ean':
+            lookup_result = i
+            break
+    return lookup_result
     
 
 column_ean = idx_ean_in_header(lines[0])
@@ -78,23 +85,21 @@ cnt_valid = 0
 cnt_invalid = 0
 
 
-# weight_factor_2 = [0, 2, 4, 6, 8, 9, 1, 3, 5, 7]
-# weight_factor_3 = [0, 3, 6, 9, 2, 5, 8, 1, 4, 7]
-# weight_factor_5_plus = [0, 5, 1, 6, 2, 7, 3, 8, 4, 9]
-# weight_factor_5_minus = [0, 5, 9, 4, 8, 3, 7, 2, 6, 1]
-
+rev_modulo = [0, 9, 8, 7, 6, 5, 4, 3, 2, 1]
 def verify_checksum(ean):
     sum = 0
-    for i in range(len(ean) - 1):
-        digit = int(ean[i])
-        if i % 2 == 0:
+    #       ... , 1 3, 1 3
+    for i in range(2, len(ean)+1):
+        if not ean[-i].isdigit():
+            return False
+        digit = ord(ean[-i]) - ord('0')
+        if i % 2 == 1:
             sum += digit
         else:
             sum += digit * 3
-    sum = sum % 10
-    if sum != 0:
-        sum = 10 - sum
-    return ean[-1] == str(sum)
+    if not ean[-1].isdigit():
+        return False
+    return rev_modulo[sum % 10] == ord(ean[-1]) - ord('0')
 
 def check_row(values, column_ean):
     if len(values) <= column_ean:
@@ -102,14 +107,9 @@ def check_row(values, column_ean):
     ean = values[column_ean]
     if len(ean) == 0:
         return False
-    while len(ean) < 13:
-        ean = '0' + ean
-    while len(ean) > 13 and ean[0] == '0':
-        ean = ean[1:]
-    if len(ean) != 13:
-        return False
-    if not ean.isdigit():
-        return False
+    for i in range(14, len(ean)+1):
+        if ean[-i] != '0':
+            return False
     return verify_checksum(ean)
 
 
@@ -125,3 +125,11 @@ for i in range(len(lines)):
 
 print(f'{cnt_valid} {cnt_invalid}')
     
+
+# start_num = 1000000
+# for num in range(start_num, 10 * start_num):
+#     if verify_checksum(str(num)) != new_verify_checksum(str(num)):
+#         print('Wrong behavior on', num)
+#         print(verify_checksum(str(num)), new_verify_checksum(str(num)))
+#         break
+# print('OK')
